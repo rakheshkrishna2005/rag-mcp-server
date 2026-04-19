@@ -264,7 +264,7 @@ class RagStore:
         retrieval = self.query_retrieval(query, top_k, source_paths, document_ids)
         matches = retrieval["matches"]
         context = "\n\n---\n\n".join(
-            f"[{index + 1}] {match['source_path']} :: chunk {match['chunk_index']}\n{match['text']}"
+            f"[{index + 1}] {match['source_path']} :: chunk {match['chunk_index']}\nScore: {match['score']:.4f}\n{match['text']}"
             for index, match in enumerate(matches)
         ) or "No matching context found."
 
@@ -272,7 +272,8 @@ class RagStore:
             [
                 "Answer only from the retrieved context.",
                 "If the context is insufficient, say that explicitly.",
-                "Cite the source path and chunk index when possible.",
+                "In your final response, use the exact format:\nAnswer:\n...\n\nEvidence:\n- [rank] source_path :: chunk_index",
+                "Do not invent citations that are not in the retrieved chunks.",
                 "",
                 f"User question: {query}",
                 "",
@@ -507,26 +508,33 @@ async def generate_answer(
 ) -> str:
     """Retrieve context, build a grounded prompt, and ask the connected Copilot LLM to answer."""
     built = store.build_prompt(query, top_k, source_paths, document_ids)
-    sampling_result = await ctx.session.create_message(
-        messages=[SamplingMessage(role="user", content=TextContent(type="text", text=built["prompt"]))],
-        max_tokens=max_tokens,
-    )
+        sampling_result = await ctx.session.create_message(
+            messages=[SamplingMessage(role="user", content=TextContent(type="text", text=built["prompt"]))],
+            max_tokens=max_tokens,
+        )
 
-    if isinstance(sampling_result.content, TextContent):
-        answer = sampling_result.content.text
-    else:
-        answer = str(sampling_result.content)
+        if isinstance(sampling_result.content, TextContent):
+            answer_text = sampling_result.content.text
+        else:
+            answer_text = str(sampling_result.content)
 
-    return _json({
-        "query": query,
-        "top_k": top_k,
-        "filters": built["filters"],
-        "matches": built["matches"],
-        "top_chunks": built["top_chunks"],
-        "answer": answer,
-        "model": sampling_result.model,
-        "stop_reason": getattr(sampling_result, "stop_reason", None),
-    })
+        evidence_lines = [
+            f"- [{index + 1}] {match['source_path']} :: chunk {match['chunk_index']}"
+            for index, match in enumerate(built["matches"])
+        ]
+        evidence_text = "\n".join(evidence_lines) if evidence_lines else "- No retrieved chunks matched this query."
+
+        return _json({
+            "query": query,
+            "top_k": top_k,
+            "filters": built["filters"],
+            "matches": built["matches"],
+            "top_chunks": built["top_chunks"],
+            "answer": answer_text,
+            "evidence": evidence_text,
+            "model": sampling_result.model,
+            "stop_reason": getattr(sampling_result, "stop_reason", None),
+        })
 
 
 @mcp.tool()
