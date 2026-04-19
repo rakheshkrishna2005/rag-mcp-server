@@ -1,0 +1,5 @@
+node_modules
+dist
+.rag
+.DS_Store
+*.log

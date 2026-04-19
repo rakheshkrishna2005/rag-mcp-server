@@ -1,0 +1,6 @@
+mcp
+faiss-cpu
+sentence-transformers
+numpy
+pypdf
+beautifulsoup4
