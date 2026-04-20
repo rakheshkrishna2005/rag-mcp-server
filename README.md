@@ -47,7 +47,7 @@ VS Code launches the server using the project virtual environment:
   "servers": {
     "copilot-rag-mcp": {
       "type": "stdio",
-      "command": "D:/Projects IV/Copilot RAG/.venv/Scripts/python.exe",
+      "command": ".venv/Scripts/python.exe",
       "args": ["server.py"]
     }
   }
